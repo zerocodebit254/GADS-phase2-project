@@ -1,0 +1,319 @@
+LAB: WORKING WITH VIRTUAL MACHINES
+LINK: https://googlepluralsight.qwiklabs.com/focuses/11023667?parent=lti_session
+
+##Objectives:
+
+In this lab, you learn how to perform the following tasks:
+
+    -Customize an application server
+
+    -Install and configure necessary software
+
+    -Configure network access
+
+    -Schedule regular backups
+
+
+
+
+Task1:
+##step1:
+- create a VM with the name 'mc-server in region 'us-central1', in zone 'us-central1-a'.its bootdisk should have 'Debian GNU/Linux 9 (stretch)' and access scopes (Identity and API access -> Access scopes) should be set to 'Set access for each API'. In it, its storage should be 'Read Write'
+- The vm should also have a new disk named 'minecraft-disk' of type 'SSD Persistent Disk'. Its source type should be 'None(blank disk)'. Its size should be 50 GB.
+-The vm encryption should be 'Google-managed key'.
+-The vm network tags should be 'minecraft-server'and name 'mc-server-ip and External Ip created on the console.
+
+
+gcloud beta compute --project=<YOUR-QWICKLABS-PROJECT-NUMBER> instances create mc-server --zone=us-central1-a --machine-type=e2-medium --subnet=default --address=34.66.213.97 --network-tier=PREMIUM --maintenance-policy=MIGRATE --service-account=<YOUR-SERVICE-ACCOUNT> --scopes=https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/trace.append,https://www.googleapis.com/auth/devstorage.read_write --tags=minecraft-server --image=debian-9-stretch-v20200910 --image-project=debian-cloud --boot-disk-size=10GB --boot-disk-type=pd-standard --boot-disk-device-name=mc-server --create-disk=mode=rw,size=50,type=projects/qwiklabs-gcp-01-c4d2af85b0f2/zones/us-central1-a/diskTypes/pd-ssd,name=minecraft-disk,device-name=minecraft-disk --reservation-affinity=any
+
+
+Task2: prepare the data disk
+##step 2:
+
+-SSH into the mc-server vm and type the following commands:
+
+# create a directory that serves as the mount point for the data disk:
+
+	sudo mkdir -p /home/minecraft
+
+my output:
+
+
+#format the disk:
+
+	sudo mkfs.ext4 -F -E lazy_itable_init=0,\
+	> lazy_journal_init=0,discard \
+	> /dev/disk/by-id/google-minecraft-disk
+
+my output: 
+
+mke2fs 1.43.4 (31-Jan-2017)
+Discarding device blocks: done                            
+Creating filesystem with 13107200 4k blocks and 3276800 inodes
+Filesystem UUID: aabbd50b-cddd-47d3-bc2a-e9c376d2d0ea
+Superblock backups stored on blocks: 
+        32768, 98304, 163840, 229376, 294912, 819200, 884736, 1605632, 2654208, 
+        4096000, 7962624, 11239424
+Allocating group tables: done                            
+Writing inode tables: done                            
+Creating journal (65536 blocks): done
+Writing superblocks and filesystem accounting information: done
+
+
+# mount the disk,:
+
+	sudo mount -o discard,defaults /dev/disk/by-id/google-minecraft-disk /home/minecraft
+
+no output is given.
+
+
+
+Task 3: Install and run the application
+##step 3:
+
+#In the SSH terminal for mc-server, update the Debian repositories on the VM:
+
+
+	sudo apt-get update
+
+
+# After updating, install the headless JRE:
+
+
+	sudo apt-get install -y default-jre-headless
+
+
+#navigate to the directory where the persistent disk is mounted:
+
+
+	cd /home/minecraft
+
+my output:
+student-01-02840f4d0163@mc-server:/home/minecraft$ 
+
+
+# install wget:
+
+	sudo apt-get install wget
+Reading package lists... Done
+Building dependency tree       
+Reading state information... Done
+wget is already the newest version (1.18-5+deb9u3).
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+
+
+# download the current Minecraft server JAR file (1.11.2 JAR):
+
+
+	sudo wget https://launcher.mojang.com/v1/objects/d0d0fe2b1dc6ab4c65554cb734270872b72dadd6/server.jar
+
+my output:
+--2020-09-12 12:43:22--  https://launcher.mojang.com/v1/objects/d0d0fe2b1dc6ab4c65554cb734270872b72dadd6/server.jar
+Resolving launcher.mojang.com (launcher.mojang.com)... 54.230.210.21
+Connecting to launcher.mojang.com (launcher.mojang.com)|54.230.210.21|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 35952401 (34M) [application/java-archive]
+Saving to: ‘server.jar’
+server.jar                   100%[=============================================>]  34.29M   171MB/s    in 0.2s    
+2020-09-12 12:43:23 (171 MB/s) - ‘server.jar’ saved [35952401/35952401]
+
+
+# initialize the Minecraft server:
+
+	sudo java -Xmx1024M -Xms1024M -jar server.jar nogui
+
+My output(expected error message):
+
+[12:45:07] [main/ERROR]: Failed to load properties from file: server.properties
+[12:45:07] [main/WARN]: Failed to load eula.txt
+[12:45:07] [main/INFO]: You need to agree to the EULA in order to run the server. Go to eula.txt for more info.
+
+
+#view the files that were created in the first initialization of the Minecraft server:
+
+	sudo ls -l
+
+my output:
+
+total 35140
+-rw-r--r-- 1 root root      181 Sep 12 12:45 eula.txt
+drwxr-xr-x 2 root root     4096 Sep 12 12:45 logs
+drwx------ 2 root root    16384 Sep 12 12:31 lost+found
+-rw-r--r-- 1 root root 35952401 Jun 24  2019 server.jar
+-rw-r--r-- 1 root root      912 Sep 12 12:45 server.properties
+
+
+#edit the EULA:
+
+	sudo nano eula.txt
+
+#Change the last line of the file from eula=false to eula=true
+#Press Ctrl+O, ENTER to save the file and then press Ctrl+X to exit nano
+
+
+##step4: Create a virtual terminal screen to start the Minecraft server
+
+#install screen
+
+	sudo apt-get install -y screen
+
+#start your Minecraft server in a screen virtual terminal
+
+	sudo screen -S mcs java -Xmx1024M -Xms1024M -jar server.jar nogui
+
+
+
+
+##step 5:Detach from the screen and close your SSH session
+
+#To detach the screen terminal, press Ctrl+A, Ctrl+D.
+#To reattach the terminal:
+
+	sudo screen -r mcs
+
+#exit the SSH terminal:
+
+	exit
+
+
+Task4: allow client traffic
+##step 6:
+
+-create a firewall rule named 'minecraft-rule',target 'Specified target tags', target tags 'minecraft-server', source filter 'IP ranges', source ip ranges '0.0.0.0/0',protocols and ports 'Specified protocols and ports'. For tcp, specify port '25565'.
+
+
+
+gcloud compute --project=<YOUR-QWICKLABS-PROJECT-NUMBER> firewall-rules create minecraft-rule --direction=INGRESS --priority=1000 --network=default --action=ALLOW --rules=tcp:25565 --source-ranges=0.0.0.0/0 --target-tags=minecraft-server
+
+
+
+
+Task5:
+##step6:Create a Cloud Storage bucket
+-ssh into your mc-server vm.
+
+
+# Create a globally unique bucket name, and store it in the environment variable YOUR_BUCKET_NAME. To make it unique, you can use your Project ID.
+
+	export YOUR_BUCKET_NAME=<YOUR_UNIQUE_BUCKET_NAME>
+
+
+#Verify it with echo
+
+	echo $YOUR_BUCKET_NAME
+
+#create the bucket using the gsutil tool, part of the Cloud SDK
+
+	gsutil mb gs://$YOUR_BUCKET_NAME-minecraft-backup
+my output:
+
+Creating gs://benny_g-minecraft-backup/...
+
+
+##step 7: Create a backup script
+
+#In the mc-server SSH terminal, navigate to your home directory
+
+	cd /home/minecraft
+
+
+#create the script
+
+	sudo nano /home/minecraft/backup.sh
+
+#Copy and paste the following script into the file:
+
+	#!/bin/bash
+	screen -r mcs -X stuff '/save-all\n/save-off\n'
+	/usr/bin/gsutil cp -R ${BASH_SOURCE%/*}/world gs://${YOUR_BUCKET_NAME}-minecraft-backup/$(date "+%Y%m%d-%H%M%S")-world
+	screen -r mcs -X stuff '/save-on\n'
+
+#Press Ctrl+O, ENTER to save the file, and press Ctrl+X to exit nano.
+
+
+
+#make the script executable
+
+	sudo chmod 755 /home/minecraft/backup.sh
+
+##step 8:Test the backup script and schedule a cron job
+
+#run the backup script
+
+	. /home/minecraft/backup.sh
+
+my output:
+
+No screen session found.
+Copying file:///home/minecraft/world/level.dat_old [Content-Type=application/octet-stream]...
+Copying file:///home/minecraft/world/session.lock [Content-Type=application/octet-stream]...
+Copying file:///home/minecraft/world/level.dat [Content-Type=application/octet-stream]...
+Copying file:///home/minecraft/world/poi/r.-1.-1.mca [Content-Type=application/octet-stream]...
+/ [4 files][ 33.9 KiB/ 33.9 KiB]                                                
+==> NOTE: You are performing a sequence of gsutil operations that may
+run significantly faster if you instead use gsutil -m cp ... Please
+see the -m section under "gsutil help options" for further information
+about when gsutil -m can be advantageous.
+
+Copying file:///home/minecraft/world/region/r.-1.-1.mca [Content-Type=application/octet-stream]...
+Copying file:///home/minecraft/world/region/r.-1.0.mca [Content-Type=application/octet-stream]...
+Copying file:///home/minecraft/world/region/r.0.-2.mca [Content-Type=application/octet-stream]...
+Copying file:///home/minecraft/world/region/r.-2.0.mca [Content-Type=application/octet-stream]...
+Copying file:///home/minecraft/world/region/r.-2.-1.mca [Content-Type=application/octet-stream]...
+Copying file:///home/minecraft/world/region/r.-1.-2.mca [Content-Type=application/octet-stream]...
+Copying file:///home/minecraft/world/region/r.-2.-2.mca [Content-Type=application/octet-stream]...
+Copying file:///home/minecraft/world/region/r.0.-1.mca [Content-Type=application/octet-stream]...
+Copying file:///home/minecraft/world/region/r.0.0.mca [Content-Type=application/octet-stream]...
+Copying file:///home/minecraft/world/DIM1/data/raids_end.dat [Content-Type=application/octet-stream]...
+Copying file:///home/minecraft/world/data/raids.dat [Content-Type=application/octet-stream]...
+Copying file:///home/minecraft/world/DIM-1/data/raids_nether.dat [Content-Type=application/octet-stream]...
+| [16 files][  4.0 MiB/  4.0 MiB]                                               
+Operation completed over 16 objects/4.0 MiB.                                     
+No screen session found.
+
+
+
+# open the cron table for editing
+#When you are prompted to select an editor, type the number corresponding to nano, and press ENTER.
+	
+	sudo crontab -e
+
+my output:
+
+no crontab for root - using an empty one
+Select an editor.  To change later, run 'select-editor'.
+  1. /bin/nano        <---- easiest
+  2. /usr/bin/vim.basic
+  3. /usr/bin/vim.tiny
+Choose 1-3 [1]: 1
+crontab: installing new crontab
+
+#At the bottom of the cron table, paste the following line
+
+	0 */4 * * * /home/minecraft/backup.sh
+
+#Press Ctrl+O, ENTER to save the cron table, and press Ctrl+X to exit nano.
+
+
+Task 6: Server maintenance
+##step 9:Connect via SSH to the server, stop it and shut down the VM
+
+
+#run the following command
+
+	sudo screen -r -X stuff '/stop\n'
+
+#stop mc-server on the gcp console.
+
+
+
+##step 7:Automate server maintenance with startup and shutdown scripts
+
+#on the gcp console, edit mc-server vm 'custom metadata'(click 'add') with the following info:
+
+
+	startup-script-url 	https://storage.googleapis.com/cloud-training/archinfra/mcserver/startup.sh
+	shutdown-script-url 	https://storage.googleapis.com/cloud-training/archinfra/mcserver/shutdown.sh
+
+#save the changes.
+
